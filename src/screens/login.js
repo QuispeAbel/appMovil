@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Text,
   StyleSheet,
@@ -23,10 +23,32 @@ import { useNavigation } from "@react-navigation/native";
 export default function Login() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [attempts, setAttempts] = React.useState(0); // Contador de intentos fallidos
+  const [isBlocked, setIsBlocked] = React.useState(false); // Estado de bloqueo
+  const [timer, setTimer] = React.useState(0); // Contador de tiempo para el bloqueo
   const navigation = useNavigation();
 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
+
+  useEffect(() => {
+    let interval;
+    if (isBlocked) {
+      // Si está bloqueado, inicia el contador regresivo de 30 segundos
+      interval = setInterval(() => {
+        setTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setIsBlocked(false);
+            setAttempts(0); // Reinicia los intentos tras el bloqueo
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval); // Limpia el intervalo cuando se desmonte el componente
+  }, [isBlocked]);
 
   const handleCreateAccount = () => {
     createUserWithEmailAndPassword(auth, email, password)
@@ -41,6 +63,11 @@ export default function Login() {
   };
 
   const handleSignIn = () => {
+    if (isBlocked) {
+      alert(`Espera ${timer} segundos antes de intentar de nuevo`);
+      return;
+    }
+
     signInWithEmailAndPassword(auth, email, password)
       .then((userCredential) => {
         console.log("Signed In!");
@@ -49,7 +76,14 @@ export default function Login() {
         navigation.navigate("Index");
       })
       .catch((error) => {
-        alert(error);
+        alert("Login fallido. Verifica tus credenciales.");
+        setAttempts((prevAttempts) => {
+          if (prevAttempts + 1 >= 3) {
+            setIsBlocked(true);
+            setTimer(30); // Bloquea por 30 segundos
+          }
+          return prevAttempts + 1;
+        });
       });
   };
 
@@ -80,6 +114,7 @@ export default function Login() {
                 onChangeText={(text) => setEmail(text)}
                 style={styles.input}
                 placeholder="example@gmial.com"
+                editable={!isBlocked} // Deshabilita el input si está bloqueado
               />
             </View>
             <View>
@@ -89,11 +124,16 @@ export default function Login() {
                 style={styles.input}
                 placeholder="contraseña"
                 secureTextEntry={true}
+                editable={!isBlocked} // Deshabilita el input si está bloqueado
               />
             </View>
-            <TouchableOpacity onPress={handleSignIn} style={styles.boton}>
+            <TouchableOpacity
+              onPress={handleSignIn}
+              style={styles.boton}
+              disabled={isBlocked} // Deshabilita el botón si está bloqueado
+            >
               <Text style={[styles.texto, { fontSize: 20, color: "#D20103" }]}>
-                Ingresar
+                {isBlocked ? `Bloqueado (${timer})` : "Ingresar"}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
